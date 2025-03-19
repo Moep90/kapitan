@@ -255,7 +255,7 @@ PrettyDumper.add_representer(str, multiline_str_presenter)
 def null_presenter(dumper, data):
     """Configures yaml for omitting value from null-datatype"""
     # get parsed args from cached.py
-    compile_args = cached.args.get("compile", None)
+    compile_args = cached.args.get("compile", cached.args.get("refs", None))
     flag_value = None
     if compile_args:
         flag_value = compile_args.yaml_dump_null_as_empty

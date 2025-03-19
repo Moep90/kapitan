@@ -558,6 +558,12 @@ def build_parser():
         default=from_dot_kapitan("refs", "yaml-multiline-string-style", "double-quotes"),
         help="set multiline string style to STYLE, default is 'double-quotes'",
     )
+    refs_parser.add_argument(
+        "--yaml-dump-null-as-empty",
+        default=from_dot_kapitan("refs", "yaml-dump-null-as-empty", False),
+        action="store_true",
+        help="dumps all none-type entries as empty, default is dumping as 'null'",
+    )
 
     lint_parser = subparser.add_parser(
         "lint", aliases=["l"], help="linter for inventory and refs", parents=[logger_parser]
