@@ -68,20 +68,14 @@ class ReclassBackend:
                     reclass_config[key] = value
             else:
                 logger.debug(
-                    "{}: Empty config file. Using reclass inventory config defaults".format(
-                        cfg_file
-                    )
+                    "{}: Empty config file. Using reclass inventory config defaults".format(cfg_file)
                 )
         else:
-            logger.debug(
-                "Inventory reclass: No config file found. Using reclass inventory config defaults"
-            )
+            logger.debug("Inventory reclass: No config file found. Using reclass inventory config defaults")
 
         # normalise relative nodes_uri and classes_uri paths
         for uri in ("nodes_uri", "classes_uri"):
-            reclass_config[uri] = os.path.normpath(
-                os.path.join(self.inventory_path, reclass_config[uri])
-            )
+            reclass_config[uri] = os.path.normpath(os.path.join(self.inventory_path, reclass_config[uri]))
 
         try:
             storage = reclass.get_storage(
@@ -90,12 +84,8 @@ class ReclassBackend:
                 reclass_config["classes_uri"],
                 reclass_config["compose_node_name"],
             )
-            class_mappings = reclass_config.get(
-                "class_mappings"
-            )  # this defaults to None (disabled)
-            _reclass = reclass.core.Core(
-                storage, class_mappings, reclass.settings.Settings(reclass_config)
-            )
+            class_mappings = reclass_config.get("class_mappings")  # this defaults to None (disabled)
+            _reclass = reclass.core.Core(storage, class_mappings, reclass.settings.Settings(reclass_config))
 
             return _reclass.inventory()
         except ReclassException as e:

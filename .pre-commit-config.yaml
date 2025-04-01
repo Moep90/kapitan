@@ -1,13 +1,13 @@
 repos:
   - repo: https://github.com/psf/black
-    rev: 22.10.0
+    rev: 25.1.0
     hooks:
     - id: black
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.32.2
+    rev: v0.44.0
     hooks:
     - id: markdownlint-fix
   - repo: https://github.com/timothycrosley/isort
-    rev: 5.0.9
+    rev: 6.0.1
     hooks:
       - id: isort
