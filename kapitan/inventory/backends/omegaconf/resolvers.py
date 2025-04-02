@@ -247,6 +247,7 @@ def register_resolvers() -> None:
 
     if os.path.exists(user_resolver_file):
         try:
+            logger.debug(f"File {user_resolver_file} found, import custom resolvers")
             register_user_resolvers(user_resolver_file)
         except Exception as e:
             logger.warning(f"Couldn't import {user_resolver_file}: error {e}")
@@ -280,6 +281,7 @@ def register_user_resolvers(user_resolver_file: str) -> None:
 
     for name, func in funcs.items():
         try:
+            logger.debug(f"Registering resolver: {name}, replace existing.")
             OmegaConf.register_new_resolver(name, func, replace=True)
         except:
             logger.warning(f"Could not load resolver {name}")
