@@ -1,15 +1,17 @@
 "vault transit tests"
 
+import base64
+import logging
+import shutil
 import tempfile
 import unittest
-import base64
-import shutil
 
 from kapitan.refs.base import RefController, Revealer
 from kapitan.refs.secrets.vaulttransit import VaultTransit
-from tests.vault_server import VaultTransitServer
 from kapitan.refs.vault_resources import VaultClient
+from tests.vault_server import VaultTransitServer
 
+logger = logging.getLogger(__name__)
 
 # Create temporary folder
 REFS_PATH = tempfile.mkdtemp()

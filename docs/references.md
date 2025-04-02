@@ -25,7 +25,7 @@ Some reference backends require configuration, both in the Inventory and to conf
 
 !!! tip "**Get started**"
     If you want to get started with references but don't want to deal with the initial setup, you can use the `plain` and `base64` reference types. These are great for demos, but we will see they are extremely helpful even in Production environments.
-    
+
     !!! danger
         Both `plain` and `base64` references do not support encryption: they are intended for development or demo purposes only.
         *DO NOT* use `plain` or `base64` for storing sensitive information!
@@ -126,8 +126,8 @@ Some reference backends require configuration, both in the Inventory and to conf
         ```
 
 ??? tip "ADVANCED: Mix-and-Match backends"
-    Remember that you can use multiple backends at the same time, and also use variable interpolation for an even greater flexibility. 
-    
+    Remember that you can use multiple backends at the same time, and also use variable interpolation for an even greater flexibility.
+
     In a multi-cloud setup, for instance, you could configure both **GKMS**
 
     !!! quote "GCP configuration"
@@ -165,7 +165,7 @@ Some reference backends require configuration, both in the Inventory and to conf
             - security.backends.awskms
             ...
             ```
-    
+
     Now because they both set the `parameters.backend` variable, you can define a reference whose backend changes based on what class is assigned to the target
 
     !!! example "`inventory/targets/cloud/gcp/acme.yml`"
@@ -188,9 +188,9 @@ Some reference backends require configuration, both in the Inventory and to conf
     References can be defined in the inventory following the syntax ***spaces added for clarity***:
 
     `?{` **`<backend_id>`** `:` **`<reference_path>`** `}`
-    
+
     ??? tip "expand for advanced features"
-        The syntax also supports for **process functions** and **create_functions** which we will discuss later, which brings the full syntax to 
+        The syntax also supports for **process functions** and **create_functions** which we will discuss later, which brings the full syntax to
 
         !!! example ""
             `?{` **`<backend_id>`** `:` **`<reference_path>`** `}` |**`<process_function>`** ||**`<create_function>`**
@@ -208,7 +208,7 @@ Some reference backends require configuration, both in the Inventory and to conf
         !!! danger "not encrypted"
             This reference type does not support encryption: it is intended for non sensitive data only. *DO NOT* use `plain` for storing sensitive information!
 
-    === "base64" 
+    === "base64"
         ```yaml
         parameters:
           ...
@@ -359,8 +359,8 @@ You can assign values to your reference using the command line. Both reading fro
         !!! note "Setting default value only"
             The `env` backend works in a slightly different ways, as it allows you to reference environment variables at runtime.
 
-            For example, for a reference called **`{?env:targets/envs_defaults/mysql_port_${target_name}}`**, **Kapitan** would look for an environment variable called **`KAPITAN_ENV_mysql_port_${TARGET_NAME}`**. 
-            
+            For example, for a reference called **`{?env:targets/envs_defaults/mysql_port_${target_name}}`**, **Kapitan** would look for an environment variable called **`KAPITAN_ENV_mysql_port_${TARGET_NAME}`**.
+
             If that variable cannot be found in the **Kapitan** environment, the default will be taken from the **`refs/targets/envs_defaults/mysql_port_${TARGET_NAME}`** file instead.
 
         ```shell
@@ -385,7 +385,7 @@ You can assign values to your reference using the command line. Both reading fro
         ```
     === "vaulttransit"
 
-        This backend expects the value to be stored as a `key:value` pair. 
+        This backend expects the value to be stored as a `key:value` pair.
 
         ```shell
         echo "a_key:a_value" | kapitan refs --write vaulttransit:refs/targets/${TARGET_NAME}/mysql/root_password -t ${TARGET_NAME} -f -
@@ -412,8 +412,8 @@ For instance, to automatically initialise a reference with a ***random string***
     ```
 
 !!! note "Initialise non existent references"
-    The first operator here `||` is more similar to a ***logical OR***. 
-    
+    The first operator here `||` is more similar to a ***logical OR***.
+
     * If the reference file does not exist, **Kapitan** will use the function to initialise it
     * If the reference file exists, no functions will run.
 
@@ -468,7 +468,7 @@ For instance, to automatically initialise a reference with a ***random string***
 === "private keys"
     === "rsa"
         !!! quote ""
-            Generates an RSA 4096 private key (PKCS#8). You can optionally pass the key size 
+            Generates an RSA 4096 private key (PKCS#8). You can optionally pass the key size
         ```yaml
         ?{${backend}:targets/${target_name}/private_key||rsa}
         ```
@@ -572,7 +572,7 @@ for more convenience.
 
 ## Embedded refs
 
-Please refer to the [CLI reference](/pages/commands/kapitan_compile/#embed-references)
+Please refer to the [CLI reference](pages/commands/kapitan_compile.md#embed-references) for more details.
 
 ## YAML SubVars References
 
@@ -619,7 +619,7 @@ I can not reference the link to the cluster in the inventory using:
     ```yaml
     parameters:
       cluster:
-        name: ?{plain:clusters/${target_name}/cluster@name} 
+        name: ?{plain:clusters/${target_name}/cluster@name}
         release_channel: ?{plain:clusters/${target_name}/cluster@releaseChannel.channel}
         link: ?{plain:clusters/${target_name}/cluster@selfLink}
     ```
@@ -655,17 +655,23 @@ To write a secret in the vault with kapitan use a ref tag with following structu
       ...
     ```
 
-Leave `mount` empty to use the specified mount from vault params from the inventory (see below). Same applies to the `path/in/vault` where the ref path in kapitan gets taken as default value.  
+Leave `mount` empty to use the specified mount from vault params from the inventory (see below). Same applies to the `path/in/vault` where the ref path in kapitan gets taken as default value.
 
 Parameters in the secret file are collected from the inventory of the target we gave from CLI `-t <target_name>`. If target isn't provided then kapitan will identify the variables from the environment when revealing secret.
 
-Environment variables that can be defined in kapitan inventory are `VAULT_ADDR`, `VAULT_NAMESPACE`, `VAULT_SKIP_VERIFY`, `VAULT_CLIENT_CERT`, `VAULT_CLIENT_KEY`, `VAULT_CAPATH` & `VAULT_CACERT`.
+The environment variables which can also be defined in kapitan inventory are `VAULT_ADDR`, `VAULT_NAMESPACE`, `VAULT_SKIP_VERIFY`, `VAULT_CLIENT_CERT`, `VAULT_CLIENT_KEY`, `VAULT_CAPATH` & `VAULT_CACERT`.
+Note that providing these variables through the inventory in envvar style is deprecated.
+Users should update their inventory to set these values in keys without the `VAULT_` prefix and in all lowercase.
+For example `VAULT_ADDR: https://127.0.0.1:8200` should be given as `addr: https://127.0.0.1:8200` in the inventory.
+Please note that configuring one of these values in both `kapitan.secrets.vaultkv` in the inventory and in the environment will cause a validation error.
+
 Extra parameters that can be defined in inventory are:
 
 - `auth`: specify which authentication method to use like `token`,`userpass`,`ldap`,`github` & `approle`
 - `mount`: specify the mount point of key's path. e.g if path=`alpha-secret/foo/bar` then `mount: alpha-secret` (default `secret`)
 - `engine`: secret engine used, either `kv-v2` or `kv` (default `kv-v2`)
-Environment variables cannot be defined in inventory are `VAULT_TOKEN`,`VAULT_USERNAME`,`VAULT_PASSWORD`,`VAULT_ROLE_ID`,`VAULT_SECRET_ID`.
+
+The environment variables which cannot be defined in inventory are `VAULT_TOKEN`,`VAULT_USERNAME`,`VAULT_PASSWORD`,`VAULT_ROLE_ID`,`VAULT_SECRET_ID`.
 
       ```yaml
       parameters:
@@ -675,11 +681,11 @@ Environment variables cannot be defined in inventory are `VAULT_TOKEN`,`VAULT_US
               auth: userpass
               engine: kv-v2
               mount: team-alpha-secret
-              VAULT_ADDR: http://127.0.0.1:8200
-              VAULT_NAMESPACE: CICD-alpha
-              VAULT_SKIP_VERIFY: false
-              VAULT_CLIENT_KEY: /path/to/key
-              VAULT_CLIENT_CERT: /path/to/cert
+              addr: http://127.0.0.1:8200
+              namespace: CICD-alpha
+              skip_verify: false
+              client_key: /path/to/key
+              client_cert: /path/to/cert
       ```
 
 ### `vaulttransit`

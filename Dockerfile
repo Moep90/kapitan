@@ -10,16 +10,17 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y \
         curl \
         build-essential \
-        git
+        git \
+        default-jre
 
-ENV POETRY_VERSION=1.7.1
+ENV POETRY_VERSION=1.8.3
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:/usr/local/go/bin:${PATH}"
 RUN python -m venv $VIRTUAL_ENV \
     && pip install --upgrade pip yq wheel poetry==$POETRY_VERSION
 
 # Install Go (for go-jsonnet)
-RUN curl -fsSL -o go.tar.gz https://go.dev/dl/go1.20.8.linux-${TARGETARCH}.tar.gz \
+RUN curl -fsSL -o go.tar.gz https://go.dev/dl/go1.23.2.linux-${TARGETARCH}.tar.gz \
     && tar -C /usr/local -xzf go.tar.gz \
     && rm go.tar.gz
 
@@ -36,12 +37,12 @@ COPY ./poetry.lock ./poetry.lock
 COPY ./README.md ./README.md
 
 # Installs and caches dependencies
-RUN poetry install --no-root --extras=gojsonnet
+ENV POETRY_VIRTUALENVS_CREATE=false
+RUN poetry install --no-root --extras=gojsonnet --extras=reclass-rs --extras=omegaconf
 
 COPY ./kapitan ./kapitan
 
-RUN pip install --editable .[test] \
-    && pip install .[gojsonnet]
+RUN pip install .[gojsonnet,omegaconf,reclass-rs]
 
 
 # Final image with virtualenv built in previous step
@@ -58,7 +59,6 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y \
         git \
         ssh-client \
-        libmagic1 \
         gnupg \
         ca-certificates \
     && apt-get clean \

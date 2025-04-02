@@ -15,7 +15,7 @@ Write articles on Kapitan and share your way of working. Inspire others, and rea
 
 Find something odd? Let us know or change it yourself: you can edit pages of this website on Github by clicking the pencil icon at the top right of this page!
 
-## Update documentation
+## Update documentation [![Build and deploy documentation](https://github.com/kapicorp/kapitan/actions/workflows/documentation.yml/badge.svg)](https://github.com/kapicorp/kapitan/actions/workflows/documentation.yml)
 
 We use [mkdocs](https://www.mkdocs.org/) to generate our gh-pages from `.md` files under docs/ folder.
 
@@ -31,11 +31,4 @@ Submit a PR for our master branch that updates the `.md` file(s). Test how the c
 
 ### Submit a PR
 
-Once the above PR has been merged, use `mkdocs gh-deploy` command to push the commit that updates the site content to your own gh-pages branch. Make sure that you already have this gh-pages branch in your fork that is up-to-date with our gh-pages branch such that the two branches share the commit history (otherwise Github would not allow PRs to be created).
-
-```text
-# locally, on master branch (which has your updated docs)
-COMMIT_MSG="your commit message to replace" make mkdocs_gh_deploy
-```
-
-After it's pushed, create a PR that targets our gh-pages branch from your gh-pages branch.
+Once the above PR has been merged, our CI will deploy your docs automatically.

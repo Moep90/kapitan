@@ -4,9 +4,16 @@ import base64
 import logging
 import mimetypes
 import os
+import re
 import sys
 
 from kapitan.errors import KapitanError, RefError, RefHashMismatchError
+from kapitan.inventory.model.references import (
+    KapitanReferenceConfig,
+    KapitanReferenceVaultKVConfig,
+    KapitanReferenceVaultTransitConfig,
+)
+from kapitan.refs import KapitanReferencesTypes
 from kapitan.refs.base import PlainRef, RefController, Revealer
 from kapitan.refs.base64 import Base64Ref
 from kapitan.refs.env import EnvRef
@@ -49,7 +56,7 @@ def ref_write(args, ref_controller):
         for line in sys.stdin:
             data += line
     else:
-        mime_type = mimetypes.guess_type(file_name)
+        mimetypes.guess_type(file_name)
         modifier = "rb" if is_binary else "r"
         with open(file_name, modifier) as fp:
             try:
@@ -61,124 +68,91 @@ def ref_write(args, ref_controller):
                     )
                 )
 
-    if token_name.startswith("gpg:"):
-        type_name, token_path = token_name.split(":")
-        recipients = [dict((("name", name),)) for name in args.recipients]
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError(
-                    "parameters.kapitan.secrets not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
-            try:
-                recipients = kap_inv_params["secrets"]["gpg"]["recipients"]
+    # Empty configuration object
+    reference_backend_configs = KapitanReferenceConfig()
 
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.gpg.recipients not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
+    if args.target_name:
+        inv = get_inventory(args.inventory_path)
+
+        try:
+            reference_backend_configs = inv.get_parameters(args.target_name).kapitan.secrets
+        except (KeyError, AttributeError):
+            raise KapitanError("parameters.kapitan.secrets not defined in {}".format(args.target_name))
+
+    type_name, token_path = token_name.split(":")
+
+    try:
+        type_name = KapitanReferencesTypes(type_name)
+    except ValueError:
+        raise KapitanError(
+            f"Invalid token type: {type_name}. Try using gpg/gkms/awskms/azkms/vaultkv/vaulttransit/base64/plain/env"
+        )
+
+    tag = f"?{{{type_name}:{token_path}}}"
+
+    if type_name == KapitanReferencesTypes.GPG:
+        # args.recipients is a list, convert to recipients dict
+        recipients = [dict((("name", name),)) for name in args.recipients]
+
+        if reference_backend_configs.gpg:
+            recipients = reference_backend_configs.gpg.recipients
+
         if not recipients:
             raise KapitanError(
                 "No GPG recipients specified. Use --recipients or specify them in "
-                + "parameters.kapitan.secrets.gpg.recipients and use --target-name"
+                + "parameters.kapitan.secrets.gpg.recipients and use --target"
             )
+
         secret_obj = GPGSecret(data, recipients, encode_base64=args.base64)
-        tag = "?{{gpg:{}}}".format(token_path)
         ref_controller[tag] = secret_obj
 
-    elif token_name.startswith("gkms:"):
-        type_name, token_path = token_name.split(":")
+    elif type_name == KapitanReferencesTypes.GKMS:
         key = args.key
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError(
-                    "parameters.kapitan.secrets not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
-            try:
-                key = kap_inv_params["secrets"]["gkms"]["key"]
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.gkms.key not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
+
+        if reference_backend_configs.gkms:
+            key = args.key or reference_backend_configs.gkms.key
+
         if not key:
             raise KapitanError(
-                "No KMS key specified. Use --key or specify it in parameters.kapitan.secrets.gkms.key and use --target-name"
+                "No KMS key specified. Use --key or specify it in parameters.kapitan.secrets.gkms.key and use --target"
             )
+
+        logger.debug(f"Using gkms key {key}")
+
         secret_obj = GoogleKMSSecret(data, key, encode_base64=args.base64)
-        tag = "?{{gkms:{}}}".format(token_path)
         ref_controller[tag] = secret_obj
 
-    elif token_name.startswith("awskms:"):
-        type_name, token_path = token_name.split(":")
+    elif type_name == KapitanReferencesTypes.AWSKMS:
         key = args.key
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError(
-                    "parameters.kapitan.secrets not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
 
-            try:
-                key = kap_inv_params["secrets"]["awskms"]["key"]
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.awskms.key not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
+        if reference_backend_configs.awskms:
+            key = args.key or reference_backend_configs.awskms.key
+
         if not key:
             raise KapitanError(
-                "No KMS key specified. Use --key or specify it in parameters.kapitan.secrets.awskms.key and use --target-name"
+                "No KMS key specified. Use --key or specify it in parameters.kapitan.secrets.awskms.key and use --target"
             )
+
+        logger.debug(f"Using awskms key {key}")
         secret_obj = AWSKMSSecret(data, key, encode_base64=args.base64)
-        tag = "?{{awskms:{}}}".format(token_path)
         ref_controller[tag] = secret_obj
 
-    elif token_name.startswith("azkms:"):
-        type_name, token_path = token_name.split(":")
+    elif type_name == KapitanReferencesTypes.AZKMS:
         key = args.key
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError(
-                    "parameters.kapitan.secrets not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
 
-            try:
-                key = kap_inv_params["secrets"]["azkms"]["key"]
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.azkms.key not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
+        if reference_backend_configs.azkms:
+            key = args.key or reference_backend_configs.azkms.key
+
         if not key:
             raise KapitanError(
-                "No KMS key specified. Use --key or specify it in parameters.kapitan.secrets.azkms.key and use --target-name"
+                "No KMS key specified. Use --key or specify it in parameters.kapitan.secrets.azkms.key and use --target"
             )
+
+        logger.debug(f"Using azkms key {key}")
         secret_obj = AzureKMSSecret(data, key, encode_base64=args.base64)
-        tag = "?{{azkms:{}}}".format(token_path)
         ref_controller[tag] = secret_obj
 
-    elif token_name.startswith("base64:"):
-        type_name, token_path = token_name.split(":")
+    elif type_name == KapitanReferencesTypes.BASE64:
         _data = data if is_binary else data.encode()
         encoding = "original"
         if args.base64:
@@ -186,35 +160,21 @@ def ref_write(args, ref_controller):
             _data = _data.encode()
             encoding = "base64"
         ref_obj = Base64Ref(_data, encoding=encoding)
-        tag = "?{{base64:{}}}".format(token_path)
         ref_controller[tag] = ref_obj
 
     # VAULT Key-Value Engine
-    elif token_name.startswith("vaultkv:"):
-        type_name, token_path = token_name.split(":")
+    elif type_name == KapitanReferencesTypes.VAULTKV:
         _data = data if is_binary else data.encode()
-        vault_params = {}
         encoding = "original"
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError(
-                    "parameters.kapitan.secrets not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
-            try:
-                vault_params = kap_inv_params["secrets"]["vaultkv"]
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.vaultkv not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
+
+        vault_params = KapitanReferenceVaultKVConfig()
+
+        if reference_backend_configs.vaultkv:
+            vault_params = reference_backend_configs.vaultkv
+
         if args.vault_auth:
-            vault_params["auth"] = args.vault_auth
-        if vault_params.get("auth") is None:
+            vault_params.auth = args.vault_auth
+        if not vault_params.auth:
             raise KapitanError(
                 "No Authentication type parameter specified. Specify it"
                 " in parameters.kapitan.secrets.vaultkv.auth and use --target-name or use --vault-auth"
@@ -224,8 +184,9 @@ def ref_write(args, ref_controller):
 
         # set mount
         mount = args.vault_mount
-        if not mount:
-            mount = vault_params.get("mount", "secret")  # secret is default mount point
+        if vault_params.mount:
+            mount = vault_params.mount
+
         kwargs["mount_in_vault"] = mount
 
         # set path in vault
@@ -242,42 +203,29 @@ def ref_write(args, ref_controller):
             raise RefError("Could not create VaultSecret: vaultkv: key is missing")
 
         secret_obj = VaultSecret(_data, vault_params, **kwargs)
-        tag = "?{{vaultkv:{}}}".format(token_path)
         ref_controller[tag] = secret_obj
 
     # VAULT Transit engine
-    elif token_name.startswith("vaulttransit:"):
-        type_name, token_path = token_name.split(":")
+    elif type_name == KapitanReferencesTypes.VAULTTRANSIT:
         _data = data.encode()
-        vault_params = {}
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError("parameters.kapitan.secrets not defined in {}".format(args.target_name))
+        vault_params = KapitanReferenceVaultTransitConfig()
 
-            try:
-                vault_params = kap_inv_params["secrets"]["vaulttransit"]
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.vaulttransit not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
+        if reference_backend_configs.vaulttransit:
+            vault_params = reference_backend_configs.vaulttransit
+
         if args.vault_auth:
-            vault_params["auth"] = args.vault_auth
-        if vault_params.get("auth") is None:
+            vault_params.auth = args.vault_auth
+
+        if not vault_params.auth:
             raise KapitanError(
                 "No Authentication type parameter specified. Specify it"
-                " in parameters.kapitan.secrets.vaulttransit.auth and use --target-name or use --vault-auth"
+                " in parameters.kapitan.secrets.vaultkv.auth and use --target-name or use --vault-auth"
             )
 
         secret_obj = VaultTransit(_data, vault_params)
-        tag = "?{{vaulttransit:{}}}".format(token_path)
         ref_controller[tag] = secret_obj
 
-    elif token_name.startswith("plain:"):
-        type_name, token_path = token_name.split(":")
+    elif type_name == KapitanReferencesTypes.PLAIN:
         _data = data if is_binary else data.encode()
         encoding = "original"
         if args.base64:
@@ -285,11 +233,9 @@ def ref_write(args, ref_controller):
             _data = _data.encode()
             encoding = "base64"
         ref_obj = PlainRef(_data, encoding=encoding)
-        tag = "?{{plain:{}}}".format(token_path)
         ref_controller[tag] = ref_obj
 
-    elif token_name.startswith("env:"):
-        type_name, token_path = token_name.split(":")
+    elif type_name == KapitanReferencesTypes.ENV:
         _data = data if is_binary else data.encode()
         encoding = "original"
         if args.base64:
@@ -297,131 +243,87 @@ def ref_write(args, ref_controller):
             _data = _data.encode()
             encoding = "base64"
         ref_obj = EnvRef(_data, encoding=encoding)
-        tag = "?{{env:{}}}".format(token_path)
         ref_controller[tag] = ref_obj
-
-    else:
-        fatal_error(
-            "Invalid token: {name}. Try using gpg/gkms/awskms/azkms/vaultkv/vaulttransit/base64/plain/env:{name}".format(
-                name=token_name
-            )
-        )
 
 
 def secret_update(args, ref_controller):
     "Update secret gpg recipients/gkms/awskms key"
     # TODO --update *might* mean something else for other types
     token_name = args.update
-    if token_name.startswith("gpg:"):
+    reference_backend_configs = KapitanReferenceConfig()
+
+    if args.target_name:
+        inv = get_inventory(args.inventory_path)
+
+        if not inv.get_parameters(args.target_name).kapitan.secrets:
+            reference_backend_configs = inv.get_parameters(args.target_name).kapitan.secrets
+            raise KapitanError("parameters.kapitan.secrets not defined in {}".format(args.target_name))
+
+    type_name, token_path = token_name.split(":")
+
+    if type_name not in KapitanReferencesTypes:
+        raise KapitanError(
+            f"Invalid token type: {type_name}. Try using gpg/gkms/awskms/azkms/vaultkv/vaulttransit/base64/plain/env"
+        )
+
+    tag = f"?{{{type_name}:{token_path}}}"
+
+    if type_name == KapitanReferencesTypes.GPG:
         # args.recipients is a list, convert to recipients dict
-        recipients = [
-            dict(
-                [
-                    ("name", name),
-                ]
-            )
-            for name in args.recipients
-        ]
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError("parameters.kapitan.secrets not defined in {}".format(args.target_name))
+        recipients = [dict((("name", name),)) for name in args.recipients]
 
-            try:
-                recipients = kap_inv_params["secrets"]["gpg"]["recipients"]
+        if reference_backend_configs.gpg:
+            recipients = reference_backend_configs.gpg.recipients
 
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.gpg.recipients not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
         if not recipients:
             raise KapitanError(
                 "No GPG recipients specified. Use --recipients or specify them in "
                 + "parameters.kapitan.secrets.gpg.recipients and use --target"
             )
-        type_name, token_path = token_name.split(":")
-        tag = "?{{gpg:{}}}".format(token_path)
+
         secret_obj = ref_controller[tag]
         secret_obj.update_recipients(recipients)
         ref_controller[tag] = secret_obj
 
-    elif token_name.startswith("gkms:"):
+    elif type_name == KapitanReferencesTypes.GKMS:
         key = args.key
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError("parameters.kapitan.secrets not defined in {}".format(args.target_name))
 
-            try:
-                key = kap_inv_params["secrets"]["gkms"]["key"]
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.gkms.key not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
+        if reference_backend_configs.gkms:
+            key = reference_backend_configs.gkms.key
+
         if not key:
             raise KapitanError(
                 "No KMS key specified. Use --key or specify it in parameters.kapitan.secrets.gkms.key and use --target"
             )
-        type_name, token_path = token_name.split(":")
-        tag = "?{{gkms:{}}}".format(token_path)
         secret_obj = ref_controller[tag]
         secret_obj.update_key(key)
         ref_controller[tag] = secret_obj
 
-    elif token_name.startswith("azkms:"):
+    elif type_name == KapitanReferencesTypes.AZKMS:
         key = args.key
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError("parameters.kapitan.secrets not defined in {}".format(args.target_name))
 
-            try:
-                key = kap_inv_params["secrets"]["azkms"]["key"]
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.azkms.key not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
+        if reference_backend_configs.azkms:
+            key = reference_backend_configs.azkms.key
+
         if not key:
             raise KapitanError(
                 "No KMS key specified. Use --key or specify it in parameters.kapitan.secrets.azkms.key and use --target"
             )
-        type_name, token_path = token_name.split(":")
-        tag = "?{{azkms:{}}}".format(token_path)
         secret_obj = ref_controller[tag]
         secret_obj.update_key(key)
         ref_controller[tag] = secret_obj
 
-    elif token_name.startswith("awskms:"):
+    elif type_name == KapitanReferencesTypes.AWSKMS:
         key = args.key
-        if args.target_name:
-            inv = get_inventory(args.inventory_path)
-            kap_inv_params = inv.get_parameters(args.target_name)["kapitan"]
-            if "secrets" not in kap_inv_params:
-                raise KapitanError("parameters.kapitan.secrets not defined in {}".format(args.target_name))
 
-            try:
-                key = kap_inv_params["secrets"]["awskms"]["key"]
-            except KeyError:
-                raise KapitanError(
-                    "parameters.kapitan.secrets.awskms.key not defined in inventory of target {}".format(
-                        args.target_name
-                    )
-                )
+        if reference_backend_configs.awskms:
+            key = reference_backend_configs.awskms.key
+
         if not key:
             raise KapitanError(
                 "No KMS key specified. Use --key or specify it in parameters.kapitan.secrets.awskms.key and use --target"
             )
-        type_name, token_path = token_name.split(":")
-        tag = "?{{awskms:{}}}".format(token_path)
+
         secret_obj = ref_controller[tag]
         secret_obj.update_key(key)
         ref_controller[tag] = secret_obj
@@ -467,45 +369,21 @@ def secret_update_validate(args, ref_controller):
     ret_code = 0
 
     for target_name, token_paths in target_token_paths.items():
-        kap_inv_params = inv.get_parameters(target_name)["kapitan"]
-        if "secrets" not in kap_inv_params:
+        secrets = inv.get_parameters(target_name).kapitan.secrets
+        if not secrets:
             raise KapitanError("parameters.kapitan.secrets not defined in {}".format(target_name))
 
-        try:
-            recipients = kap_inv_params["secrets"]["gpg"]["recipients"]
-        except KeyError:
-            recipients = None
-        try:
-            gkey = kap_inv_params["secrets"]["gkms"]["key"]
-        except KeyError:
-            gkey = None
-        try:
-            awskey = kap_inv_params["secrets"]["awskms"]["key"]
-        except KeyError:
-            awskey = None
-        try:
-            vaultkv = kap_inv_params["secrets"]["vaultkv"]["auth"]
-        except KeyError:
-            vaultkv = None
-        try:
-            # Referenced Auth
-            vkey = kap_inv_params["secrets"]["vaulttransit"]["key"]
-        except KeyError:
-            vkey = None
-        try:
-            azkey = kap_inv_params["secrets"]["azkms"]["key"]
-        except KeyError:
-            azkey = None
-
         for token_path in token_paths:
-            if token_path.startswith("?{gpg:"):
-                if not recipients:
+            type_name = re.match(r"\?\{(\w+):", token_path).group(1)
+            if type_name == KapitanReferencesTypes.GPG:
+                if not secrets.gpg:
                     logger.debug(
                         "secret_update_validate: target: %s has no inventory gpg recipients, skipping %s",
                         target_name,
                         token_path,
                     )
                     continue
+                recipients = secrets.gpg.recipients
                 secret_obj = ref_controller[token_path]
                 target_fingerprints = set(lookup_fingerprints(recipients))
                 secret_fingerprints = set(lookup_fingerprints(secret_obj.recipients))
@@ -531,25 +409,26 @@ def secret_update_validate(args, ref_controller):
                         secret_obj.update_recipients(new_recipients)
                         ref_controller[token_path] = secret_obj
 
-            elif token_path.startswith("?{gkms:"):
-                if not gkey:
+            elif type_name == KapitanReferencesTypes.GKMS:
+                if not secrets.gkms:
                     logger.debug(
                         "secret_update_validate: target: %s has no inventory gkms key, skipping %s",
                         target_name,
                         token_path,
                     )
                     continue
+                key = secrets.gkms.key
                 secret_obj = ref_controller[token_path]
-                if gkey != secret_obj.key:
+                if secrets.gpg.key != key:
                     if args.validate_targets:
                         logger.info("%s key mismatch", token_path)
                         ret_code = 1
                     else:
-                        secret_obj.update_key(gkey)
+                        secret_obj.update_key(key)
                         ref_controller[token_path] = secret_obj
 
-            elif token_path.startswith("?{vaulttransit:"):
-                if not vkey:
+            elif type_name == KapitanReferencesTypes.VAULTTRANSIT:
+                if not secrets.vaulttransit:
                     logger.debug(
                         "secret_update_validate: target: %s has no inventory vaulttransit key, skipping %s",
                         target_name,
@@ -557,33 +436,35 @@ def secret_update_validate(args, ref_controller):
                     )
                     continue
                 secret_obj = ref_controller[token_path]
-                if vkey != secret_obj.vault_params["key"]:
+                key = secrets.vaulttransit.key
+                if key != secret_obj.vault_params["key"]:
                     if args.validate_targets:
                         logger.info("%s key mismatch", token_path)
                         ret_code = 1
                     else:
-                        secret_obj.update_key(vkey)
+                        secret_obj.update_key(key)
                         ref_controller[token_path] = secret_obj
 
-            elif token_path.startswith("?{awskms:"):
-                if not awskey:
+            elif type_name == KapitanReferencesTypes.AWSKMS:
+                if not secrets.awskms:
                     logger.debug(
                         "secret_update_validate: target: %s has no inventory awskms key, skipping %s",
                         target_name,
                         token_path,
                     )
                     continue
+                key = secrets.awskms.key
                 secret_obj = ref_controller[token_path]
-                if awskey != secret_obj.key:
+                if key != secret_obj.key:
                     if args.validate_targets:
                         logger.info("%s key mismatch", token_path)
                         ret_code = 1
                     else:
-                        secret_obj.update_key(awskey)
+                        secret_obj.update_key(key)
                         ref_controller[token_path] = secret_obj
 
-            elif token_path.startswith("?{azkms:"):
-                if not azkey:
+            elif type_name == KapitanReferencesTypes.AZKMS:
+                if not secrets.azkey:
                     logger.debug(
                         "secret_update_validate: target: %s has no inventory azkms key, skipping %s",
                         target_name,
@@ -591,12 +472,13 @@ def secret_update_validate(args, ref_controller):
                     )
                     continue
                 secret_obj = ref_controller[token_path]
-                if azkey != secret_obj.key:
+                key = secrets.azkms.key
+                if key != secret_obj.key:
                     if args.validate_targets:
                         logger.info("%s key mismatch", token_path)
                         ret_code = 1
                     else:
-                        secret_obj.update_key(azkey)
+                        secret_obj.update_key(key)
                         ref_controller[token_path] = secret_obj
 
             else:

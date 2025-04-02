@@ -70,7 +70,7 @@ Compiles one or more targets selected matching **labels** with  `--labels` or `-
           customer: acme
     ```
 
-    see [**Labels**](/inventory/#target-labels) for more details
+    see [**Labels**](../inventory/advanced.md#target-labels) for more details
 
 ```shell
 $ kapitan compile -l customer=acme
@@ -80,7 +80,7 @@ Compiled acme-pipelines (0.10s)
 
 ## Fetch on compile
 
-Use the `--fetch` flag to fetch [**Remote Inventories**](/inventory/#remote-inventories) and the [**External Dependencies**](/external_dependencies/).
+Use the `--fetch` flag to fetch [**External Dependencies**](../external_dependencies.md).
 
 ```shell
 kapitan compile --fetch
@@ -160,7 +160,7 @@ The `--embed-refs` flags tells **Kapitan** to embed these references on compile,
                        [--inventory-path INVENTORY_PATH] [--cache]
                        [--cache-paths PATH [PATH ...]]
                        [--ignore-version-check] [--use-go-jsonnet]
-                       [--compose-node-name] [--schemas-path SCHEMAS_PATH]
+                       [--compose-target-name] [--schemas-path SCHEMAS_PATH]
                        [--yaml-multiline-string-style STYLE]
                        [--yaml-dump-null-as-empty]
                        [--targets TARGET [TARGET ...] | --labels
@@ -168,7 +168,7 @@ The `--embed-refs` flags tells **Kapitan** to embed these references on compile,
 
         options:
           -h, --help            show this help message and exit
-          --inventory-backend {reclass}
+          --inventory-backend {reclass,reclass-rs}
                                 Select the inventory backend to use (default=reclass)
           --search-paths JPATH [JPATH ...], -J JPATH [JPATH ...]
                                 set search paths, default is ["."]
@@ -203,7 +203,7 @@ The `--embed-refs` flags tells **Kapitan** to embed these references on compile,
           --ignore-version-check
                                 ignore the version from .kapitan
           --use-go-jsonnet      use go-jsonnet
-          --compose-node-name   Create same subfolder structure from inventory/targets
+          --compose-target-name   Create same subfolder structure from inventory/targets
                                 inside compiled folder
           --schemas-path SCHEMAS_PATH
                                 set schema cache path, default is "./schemas"

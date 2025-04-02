@@ -1,9 +1,23 @@
+exclude: ^(examples/|tests/test_terraform_compiled/|tests/test_kubernetes_compiled/|tests/test_docker_compiled/|tests/test_resources/|tests/test_jsonnet/)
 repos:
   - repo: https://github.com/psf/black
-    rev: 22.10.0
+    rev: 25.1.0
     hooks:
     - id: black
-  - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.32.2
+  - repo: https://github.com/PyCQA/isort
+    rev: 6.0.1
     hooks:
-    - id: markdownlint-fix
+      - id: isort
+        args: [--profile, black]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: check-docstring-first
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+  - repo: https://github.com/rhysd/actionlint
+    rev: 'v1.7.7'
+    hooks:
+    - id: actionlint-docker

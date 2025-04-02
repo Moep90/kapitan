@@ -22,12 +22,24 @@ import yaml
 import kapitan.cached as cached
 from kapitan import __file__ as kapitan_install_path
 from kapitan.errors import CompileError, InventoryError, KapitanError
-from kapitan.inventory import Inventory, ReclassInventory, AVAILABLE_BACKENDS
-from kapitan.utils import PrettyDumper, deep_get, flatten_dict, render_jinja2_file, sha256_string
+from kapitan.inventory import Inventory, get_inventory_backend
+from kapitan.utils import (
+    PrettyDumper,
+    StrEnum,
+    deep_get,
+    flatten_dict,
+    render_jinja2_file,
+    sha256_string,
+)
 
 logger = logging.getLogger(__name__)
 
 JSONNET_CACHE = {}
+
+yaml.SafeDumper.add_multi_representer(
+    StrEnum,
+    yaml.representer.SafeRepresenter.represent_str,
+)
 
 
 def resource_callbacks(search_paths):
@@ -244,7 +256,7 @@ def search_imports(cwd, import_str, search_paths):
     return normalised_path, normalised_path_content.encode()
 
 
-def inventory(search_paths: list, target_name: str = None, inventory_path: str = "./inventory"):
+def inventory(search_paths: list = [], target_name: str = None, inventory_path: str = "./inventory"):
     """
     Reads inventory (set by inventory_path) in search_paths.
     set nodes_uri to change reclass nodes_uri the default value
@@ -252,10 +264,7 @@ def inventory(search_paths: list, target_name: str = None, inventory_path: str =
     set inventory_path to read custom path. None defaults to value set via cli
     Returns a dictionary with the inventory for target
     """
-    if inventory_path is None:
-        # grab inventory_path value from cli subcommand
-        inventory_path_arg = cached.args.get("compile") or cached.args.get("inventory")
-        inventory_path = inventory_path_arg.inventory_path
+    inventory_path = inventory_path or cached.args.inventory_path
 
     inv_path_exists = False
 
@@ -274,11 +283,12 @@ def inventory(search_paths: list, target_name: str = None, inventory_path: str =
     if not inv_path_exists:
         raise InventoryError(f"Inventory not found in search paths: {search_paths}")
 
+    logger.debug(f"Using inventory found at {full_inv_path}")
     inv = get_inventory(full_inv_path)
 
     if target_name:
         target = inv.get_target(target_name)
-        return {"parameters": target.parameters, "classes": target.classes}
+        return target.model_dump(by_alias=True)
 
     return inv.inventory
 
@@ -288,7 +298,7 @@ def generate_inventory(args):
         inv = get_inventory(args.inventory_path)
 
         if args.target_name:
-            inv = inv.get_parameters(args.target_name)
+            inv = inv.inventory[args.target_name]
             if args.pattern:
                 pattern = args.pattern.split(".")
                 inv = deep_get(inv, pattern)
@@ -306,7 +316,7 @@ def generate_inventory(args):
         sys.exit(1)
 
 
-def get_inventory(inventory_path) -> Inventory:
+def get_inventory(inventory_path, ignore_class_not_found: bool = False) -> Inventory:
     """
     generic inventory function that makes inventory backend pluggable
     default backend is reclass
@@ -316,18 +326,36 @@ def get_inventory(inventory_path) -> Inventory:
     if cached.inv and cached.inv.targets:
         return cached.inv
 
-    # select inventory backend
-    backend_id = cached.args.get("inventory-backend")
-    backend = AVAILABLE_BACKENDS.get(backend_id)
-    inventory_backend: Inventory = None
-    if backend != None:
-        logger.debug(f"Using {backend_id} as inventory backend")
-        inventory_backend = backend(inventory_path)
-    else:
-        logger.debug(f"Backend {backend_id} is unknown, falling back to reclass as inventory backend")
-        inventory_backend = ReclassInventory(inventory_path)
+    compose_target_name = hasattr(cached.args, "compose_target_name") and cached.args.compose_target_name
+    if hasattr(cached.args, "compose_node_name") and cached.args.compose_node_name:
+        logger.warning(
+            "inventory flag '--compose-node-name' is deprecated and scheduled to be dropped with the next release. "
+            "Please use '--compose-target-name' instead."
+        )
+        compose_target_name = True
 
-    inventory_backend.search_targets()
+    # select inventory backend
+    backend_id = hasattr(cached.args, "inventory_backend") and cached.args.inventory_backend
+    compose_target_name = hasattr(cached.args, "compose_target_name") and cached.args.compose_target_name
+    backend = get_inventory_backend(backend_id)
+
+    logger.debug(f"Using {backend.__name__} as inventory backend")
+
+    try:
+        inventory_backend = backend(
+            inventory_path=inventory_path,
+            compose_target_name=compose_target_name,
+            ignore_class_not_found=ignore_class_not_found,
+        )
+    except InventoryError as e:
+        logger.fatal(e)
+        raise
 
     cached.inv = inventory_backend
-    return inventory_backend
+    cached.global_inv = cached.inv.inventory
+
+    # migrate inventory to selected inventory backend
+    if hasattr(cached.args, "migrate") and cached.args.migrate:
+        inventory_backend.migrate()
+
+    return cached.inv
