@@ -70,7 +70,7 @@ class KapitanInputTypeHelmConfig(KapitanInputTypeBaseConfig):
     output_type: OutputType = OutputType.AUTO
     prune: Optional[bool] = False
     helm_params: dict = {}
-    helm_values: Optional[Any] = None
+    helm_values: Union[str, dict] = None
     helm_values_files: Optional[List[str]] = []
     helm_path: Optional[str] = None
     kube_version: Optional[str] = None
