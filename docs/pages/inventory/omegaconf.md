@@ -9,7 +9,8 @@ Here are all of the differences to using reclass, new features and some instruct
 
 ### Differences to reclass
 
-#### Supported:
+#### Supported
+
 * compose-node-name
 * key overwrite prefix '`~`'
 * interpolations
@@ -19,6 +20,7 @@ Here are all of the differences to using reclass, new features and some instruct
 * escaped interpolations
   
 #### Not (yet) supported
+
 * exports
 * inventory queries
 * interpolation to yaml-keys containing '`.`' (the delimiter itself)
@@ -32,6 +34,7 @@ OmegaConf uses the default yaml-path notation using dots (`.`) as key delimiter.
 All of [OmegaConfs native functionalities](https://omegaconf.readthedocs.io/en/2.3_branch/grammar.html#the-omegaconf-grammar) are supported.
 
 #### General
+
 * relative interpolation
 * list accessing
 * mandatory values
@@ -113,6 +116,7 @@ list: ${split:hello.world} # --> yaml list [hello, world]
 To access the feature you have to use a kapitan version >=0.33.0. 
 
 Use the flag `--omegaconf` in your command to indicate to use OmegaConf as backend. To specify that you want to use it everytime, add this to your `.kapitan` file:
+
 ```yaml
 inventory_backend:
     omegaconf: true
@@ -126,6 +130,7 @@ If this is your first time running you have to specify `--migrate` to adapt to O
     Also check your inventory if it contains some yaml errors like duplicate keys or wrong yaml types. The command will not change anything if some errors occur.
 
 The migration consists of the following steps:
+
 * replacing the delimiter '`:`' with '`.`' in interpolations 
 * replacing meta interpolations '`_reclass_`' to '`_meta_`'
 * replacing escaped interpolations `\${content}` to resolver `${tag:content}`
