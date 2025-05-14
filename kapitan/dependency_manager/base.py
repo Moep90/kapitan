@@ -265,10 +265,12 @@ def fetch_helm_archive(helm_path, repo, chart_name, version, save_path):
 
     if repo.startswith("oci://"):
         args.append(repo)
-    else:
+    elif repo.startswith("https://") or repo.startswith("http://"):
         args.append("--repo")
         args.append(repo)
         args.append(chart_name)
+    else:
+        args.append(f"{repo}/{chart_name}")
 
     response = helm_cli(helm_path, args)
     if response != "":
