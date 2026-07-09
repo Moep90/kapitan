@@ -29,6 +29,7 @@ from kapitan.utils import (
     flatten_dict,
     force_copy_file,
     get_entropy,
+    is_leading_zero_int_string,
     prune_empty,
     sha256_string,
 )
@@ -488,3 +489,19 @@ class CompareVersionsTest(unittest.TestCase):
 
     def test_compare_versions_major_diff(self):
         self.assertEqual(compare_versions("2.0.0", "1.9.9"), "greater")
+
+
+class IsLeadingZeroIntStringTest(unittest.TestCase):
+    """is_leading_zero_int_string flags leading-zero digit strings a Go/YAML 1.2
+    parser (Helm, Kubernetes) would re-read as a number (#1370, #1595)."""
+
+    def test_flags_leading_zero_digit_strings(self):
+        self.assertTrue(is_leading_zero_int_string("03190301"))
+
+    def test_does_not_flag_other_strings(self):
+        # One case per guard: no leading zero (other int-looking strings are
+        # PyYAML's job, not this predicate's), non-digit, single char (len > 1
+        # guard), empty.
+        for value in ("1234567", "12a", "0", ""):
+            with self.subTest(value=value):
+                self.assertFalse(is_leading_zero_int_string(value))
