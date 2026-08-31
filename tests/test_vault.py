@@ -46,6 +46,11 @@ class VaultSecretTest(unittest.TestCase):
             server.close_container()
         shutil.rmtree(REFS_PATH, ignore_errors=True)
 
+    def setUp(self):
+        # Re-export this server's credentials; a parallel worker may have set up
+        # another vault server whose token clobbered the shared environment.
+        self.server.export_env()
+
     def test_token_authentication(self):
         """
         Authenticate using token
